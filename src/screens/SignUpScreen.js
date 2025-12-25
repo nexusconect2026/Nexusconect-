@@ -1,76 +1,66 @@
 import React, { useState } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, StyleSheet, 
-  Alert, SafeAreaView, ScrollView, ActivityIndicator 
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { Feather } from '@expo/vector-icons';
 
 export default function SignUpScreen({ navigation }) {
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [customId, setCustomId] = useState('');
-  const [personality, setPersonality] = useState('');
+  const [username, setUsername] = useState('');
+  const [loading, setLoading] = useState(false);
 
   async function handleSignUp() {
-    if (!customId || !personality) return Alert.alert('Atenção', 'Complete seu perfil.');
+    if (!email || !password || !username) return Alert.alert("Aviso", "Preencha tudo.");
     setLoading(true);
-    const { data, error: authError } = await supabase.auth.signUp({ email, password });
-    if (authError) {
-      Alert.alert('Erro', authError.message);
-      setLoading(false);
-      return;
-    }
-    const { error: profileError } = await supabase.from('profiles').insert([
-      { id: data.user.id, custom_id: customId, personality_type: personality, nexus_coins: 500, level: 1 }
-    ]);
-    if (profileError) Alert.alert('Erro', 'ID já existe.');
-    else navigation.navigate('Lobby');
-    setLoading(false);
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data.user) {
+        await supabase.from('profiles').insert([{ 
+          id: data.user.id, 
+          custom_id: username.toLowerCase().trim(), 
+          nexus_coins: 500, 
+          level: 1,
+          role: 'user',
+          is_verified: false
+        }]);
+        Alert.alert("Sucesso", "Bem-vindo ao Nexus!");
+        navigation.navigate('Login');
+      }
+    } catch (e) { Alert.alert("Erro", e.message); }
+    finally { setLoading(false); }
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.brand}>NEXUS</Text>
-        {step === 1 ? (
-          <View style={styles.card}>
-            <TextInput style={styles.input} placeholder="E-mail" placeholderTextColor="#555" onChangeText={setEmail}/>
-            <TextInput style={styles.input} placeholder="Senha" placeholderTextColor="#555" secureTextEntry onChangeText={setPassword}/>
-            <TouchableOpacity style={styles.mainBtn} onPress={() => setStep(2)}><Text style={styles.mainBtnText}>PRÓXIMO</Text></TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <TextInput style={styles.input} placeholder="@SeuID" placeholderTextColor="#555" onChangeText={setCustomId}/>
-            <View style={styles.grid}>
-              {['Explorador', 'Líder', 'Criativo'].map(t => (
-                <TouchableOpacity key={t} style={[styles.chip, personality === t && styles.chipActive]} onPress={() => setPersonality(t)}>
-                  <Text style={[styles.chipText, personality === t && styles.chipTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity style={styles.mainBtn} onPress={handleSignUp} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.mainBtnText}>FINALIZAR</Text>}
-            </TouchableOpacity>
-          </View>
-        )}
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
+          <Feather name="arrow-left" size={24} color="#8E44AD" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Membro da Elite</Text>
+        <Text style={styles.subtitle}>Crie sua identidade digital no Nexus.</Text>
+
+        <View style={styles.form}>
+          <TextInput style={styles.input} placeholder="Username" placeholderTextColor="#444" value={username} onChangeText={setUsername} />
+          <TextInput style={styles.input} placeholder="E-mail" placeholderTextColor="#444" value={email} onChangeText={setEmail} autoCapitalize="none" />
+          <TextInput style={styles.input} placeholder="Senha" placeholderTextColor="#444" value={password} onChangeText={setPassword} secureTextEntry />
+          
+          <TouchableOpacity style={styles.btn} onPress={handleSignUp} disabled={loading}>
+            <Text style={styles.btnText}>{loading ? "REGISTRANDO..." : "FINALIZAR CADASTRO"}</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0A0A0A' },
-  container: { padding: 25, alignItems: 'center' },
-  brand: { color: '#8E44AD', fontSize: 32, fontWeight: '800', letterSpacing: 5, marginVertical: 40 },
-  card: { backgroundColor: '#121212', padding: 25, borderRadius: 20, width: '100%', borderWidth: 1, borderColor: '#1A1A1A' },
-  input: { backgroundColor: '#1A1A1A', color: '#fff', padding: 15, borderRadius: 12, marginBottom: 15 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
-  chip: { padding: 10, borderRadius: 10, backgroundColor: '#1A1A1A' },
-  chipActive: { backgroundColor: '#8E44AD' },
-  chipText: { color: '#666' },
-  chipTextActive: { color: '#fff' },
-  mainBtn: { backgroundColor: '#8E44AD', padding: 18, borderRadius: 12, alignItems: 'center' },
-  mainBtnText: { color: '#fff', fontWeight: 'bold' }
+  container: { flex: 1, backgroundColor: '#0F0F0F' },
+  content: { padding: 30, flexGrow: 1, justifyContent: 'center' },
+  back: { marginBottom: 20 },
+  title: { color: '#fff', fontSize: 32, fontWeight: '800' },
+  subtitle: { color: '#666', fontSize: 16, marginBottom: 40 },
+  input: { backgroundColor: '#161616', color: '#fff', padding: 20, borderRadius: 12, marginBottom: 15, borderWidth: 1, borderColor: '#222' },
+  btn: { backgroundColor: '#8E44AD', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  btnText: { color: '#fff', fontWeight: 'bold' }
 });

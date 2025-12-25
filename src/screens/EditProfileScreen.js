@@ -1,55 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, StyleSheet, SafeAreaView, TextInput, 
-  TouchableOpacity, Alert, ActivityIndicator 
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Feather } from '@expo/vector-icons';
 
 export default function EditProfileScreen({ navigation }) {
-  const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getProfile();
+    loadData();
   }, []);
 
-  async function getProfile() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('custom_id, profile_bio')
-        .eq('id', user.id)
-        .single();
-
-      if (data) {
-        setUsername(data.custom_id);
-        setBio(data.profile_bio || '');
-      }
-    } catch (error) {
-      console.log(error);
+  async function loadData() {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (data) {
+      setUsername(data.custom_id);
+      setBio(data.profile_bio || '');
     }
   }
 
-  async function updateProfile() {
+  async function handleSave() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-
-    const updates = {
-      id: user.id,
-      custom_id: username,
-      profile_bio: bio,
-      updated_at: new Date(),
-    };
-
-    const { error } = await supabase.from('profiles').upsert(updates);
+    
+    const { error } = await supabase
+      .from('profiles')
+      .update({ custom_id: username.toLowerCase(), profile_bio: bio })
+      .eq('id', user.id);
 
     if (error) {
-      Alert.alert('Erro', 'Não foi possível atualizar o perfil.');
+      Alert.alert("Erro", "Nome de usuário já em uso ou inválido.");
     } else {
-      Alert.alert('Sucesso', 'Perfil atualizado!');
+      Alert.alert("Sucesso", "Perfil atualizado!");
       navigation.goBack();
     }
     setLoading(false);
@@ -58,33 +42,25 @@ export default function EditProfileScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="x" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>EDITAR PERFIL</Text>
-        <TouchableOpacity onPress={updateProfile} disabled={loading}>
-          {loading ? <ActivityIndicator color="#8E44AD" /> : <Feather name="check" size={24} color="#8E44AD" />}
+        <TouchableOpacity onPress={() => navigation.goBack()}><Feather name="x" size={24} color="#fff" /></TouchableOpacity>
+        <Text style={styles.title}>Editar Perfil</Text>
+        <TouchableOpacity onPress={handleSave} disabled={loading}>
+          <Text style={[styles.saveText, loading && { opacity: 0.5 }]}>Salvar</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        <Text style={styles.label}>NOME DE USUÁRIO (NEXUS ID)</Text>
-        <TextInput 
-          style={styles.input} 
-          value={username} 
-          onChangeText={setUsername} 
-          placeholder="Seu ID..." 
-          placeholderTextColor="#333"
-        />
-
-        <Text style={styles.label}>BIO</Text>
+      <View style={styles.form}>
+        <Text style={styles.label}>NOME DE USUÁRIO</Text>
+        <TextInput style={styles.input} value={username} onChangeText={setUsername} autoCapitalize="none" />
+        
+        <Text style={styles.label}>BIOGRAFIA</Text>
         <TextInput 
           style={[styles.input, styles.bioInput]} 
           value={bio} 
           onChangeText={setBio} 
-          placeholder="Fale sobre você..." 
-          placeholderTextColor="#333"
-          multiline
+          multiline 
+          placeholder="Conte um pouco sobre você..."
+          placeholderTextColor="#444"
         />
       </View>
     </SafeAreaView>
@@ -92,11 +68,12 @@ export default function EditProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  container: { flex: 1, backgroundColor: '#0F0F0F' },
   header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerTitle: { color: '#FFF', fontWeight: 'bold' },
-  content: { padding: 20 },
-  label: { color: '#444', fontSize: 10, fontWeight: '900', marginBottom: 10, letterSpacing: 1 },
-  input: { backgroundColor: '#111', color: '#FFF', padding: 15, borderRadius: 12, marginBottom: 25, borderWidth: 1, borderColor: '#1A1A1A' },
+  title: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  saveText: { color: '#8E44AD', fontWeight: 'bold', fontSize: 16 },
+  form: { padding: 25 },
+  label: { color: '#8E44AD', fontSize: 11, fontWeight: 'bold', marginBottom: 10, letterSpacing: 1 },
+  input: { backgroundColor: '#161616', color: '#fff', padding: 15, borderRadius: 12, marginBottom: 25, borderWidth: 1, borderColor: '#222' },
   bioInput: { height: 100, textAlignVertical: 'top' }
 });

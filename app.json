@@ -4,31 +4,45 @@
     "slug": "nexusconect",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050505"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "android": {
-      "package": "com.nexusconect.nexusconect",
       "adaptiveIcon": {
-        "backgroundColor": "#000000"
-      }
-    },
-    "splash": {
-      "backgroundColor": "#000000",
-      "resizeMode": "contain"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#050505"
+      },
+      "package": "com.nexusconect2026.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "extra": {
       "eas": {
         "projectId": "fdd103e8-37bc-4d3a-879f-9ccd65223e53"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/fdd103e8-37bc-4d3a-879f-9ccd65223e53"
-    },
-    "ios": {}
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Permitir que o Nexus Conect use o microfone para salas de voz."
+        }
+      ]
+    ],
+    "owner": "nexusconect"
   }
 }

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  Image, SafeAreaView, ActivityIndicator, TextInput 
+  Image, SafeAreaView, ActivityIndicator, TextInput, StatusBar 
 } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialIcons } from '@expo/vector-icons';
 
 export default function FriendsScreen({ navigation }) {
   const [friends, setFriends] = useState([]);
@@ -13,6 +13,13 @@ export default function FriendsScreen({ navigation }) {
 
   useEffect(() => {
     fetchFriends();
+    
+    // Realtime para atualizar status de amizade
+    const channel = supabase.channel('friends_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'friends' }, fetchFriends)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, []);
 
   async function fetchFriends() {
@@ -20,12 +27,12 @@ export default function FriendsScreen({ navigation }) {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Busca amigos onde o status é 'accepted'
+      // Busca amigos e traz os dados do perfil (incluindo role e se é verificado)
       const { data, error } = await supabase
         .from('friends')
         .select(`
           friend_id,
-          profiles:friend_id (id, custom_id, level, personality_type)
+          profiles:friend_id (id, custom_id, level, role, is_verified)
         `)
         .eq('user_id', user.id)
         .eq('status', 'accepted');
@@ -54,31 +61,41 @@ export default function FriendsScreen({ navigation }) {
       <View style={styles.avatarContainer}>
         <Image 
           source={{ uri: `https://api.dicebear.com/7.x/initials/svg?seed=${item.profiles.custom_id}` }} 
-          style={styles.avatar} 
+          style={[
+            styles.avatar, 
+            item.profiles.role === 'admin' && { borderColor: '#E74C3C', borderWidth: 2 }
+          ]} 
         />
         <View style={styles.onlineBadge} />
       </View>
       
       <View style={styles.info}>
-        <Text style={styles.name}>@{item.profiles.custom_id}</Text>
-        <Text style={styles.subInfo}>Nível {item.profiles.level} • {item.profiles.personality_type}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name}>@{item.profiles.custom_id}</Text>
+          {item.profiles.is_verified && <MaterialIcons name="verified" size={14} color="#00D4FF" style={{marginLeft: 5}} />}
+          {item.profiles.role === 'admin' && (
+            <View style={styles.staffTag}><Text style={styles.staffTagText}>STAFF</Text></View>
+          )}
+        </View>
+        <Text style={styles.subInfo}>Nível {item.profiles.level} • Conectado</Text>
       </View>
 
-      <TouchableOpacity style={styles.chatIcon}>
-        <Feather name="message-circle" size={20} color="#8E44AD" />
-      </TouchableOpacity>
+      <View style={styles.chatIcon}>
+        <Feather name="message-square" size={20} color="#8E44AD" />
+      </View>
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color="#FFF" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Feather name="chevron-left" size={28} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AMIGOS</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('AddFriend')}>
-          <Feather name="user-plus" size={24} color="#8E44AD" />
+        <Text style={styles.headerTitle}>NETWORKING</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('AddFriend')} style={styles.addBtn}>
+          <Feather name="user-plus" size={22} color="#FFF" />
         </TouchableOpacity>
       </View>
 
@@ -86,7 +103,7 @@ export default function FriendsScreen({ navigation }) {
         <Feather name="search" size={18} color="#444" style={{marginRight: 10}} />
         <TextInput 
           style={styles.searchInput}
-          placeholder="Procurar nos teus amigos..."
+          placeholder="Procurar nos seus contatos..."
           placeholderTextColor="#444"
           value={search}
           onChangeText={setSearch}
@@ -94,15 +111,19 @@ export default function FriendsScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#8E44AD" style={{marginTop: 50}} />
+        <View style={styles.center}><ActivityIndicator color="#8E44AD" size="large" /></View>
       ) : (
         <FlatList 
           data={filteredFriends}
           keyExtractor={item => item.friend_id}
           renderItem={renderFriend}
           contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Ainda não tens amigos adicionados.</Text>
+            <View style={styles.emptyContainer}>
+              <Feather name="users" size={50} color="#222" />
+              <Text style={styles.emptyText}>Sua lista de elite está vazia.</Text>
+            </View>
           }
         />
       )}
@@ -111,47 +132,55 @@ export default function FriendsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  container: { flex: 1, backgroundColor: '#0F0F0F' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
-  headerTitle: { color: '#FFF', fontSize: 13, fontWeight: '900', letterSpacing: 2 },
+  headerTitle: { color: '#FFF', fontSize: 14, fontWeight: '900', letterSpacing: 3 },
+  backBtn: { width: 40 },
+  addBtn: { backgroundColor: '#8E44AD', padding: 8, borderRadius: 12 },
   searchBar: { 
     flexDirection: 'row', 
-    backgroundColor: '#111', 
-    margin: 20, 
-    padding: 12, 
-    borderRadius: 15, 
+    backgroundColor: '#161616', 
+    marginHorizontal: 20, 
+    marginBottom: 20,
+    padding: 15, 
+    borderRadius: 16, 
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#161616'
+    borderColor: '#222'
   },
-  searchInput: { color: '#FFF', flex: 1, fontSize: 14 },
-  list: { paddingHorizontal: 20 },
+  searchInput: { color: '#FFF', flex: 1, fontSize: 15 },
+  list: { paddingHorizontal: 20, paddingBottom: 40 },
   friendCard: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: '#121212', 
+    backgroundColor: '#161616', 
     padding: 15, 
-    borderRadius: 18, 
-    marginBottom: 10,
+    borderRadius: 22, 
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#1A1A1A'
+    borderColor: '#222'
   },
-  avatarContainer: { width: 50, height: 50, borderRadius: 15, position: 'relative' },
-  avatar: { width: '100%', height: '100%', borderRadius: 15 },
+  avatarContainer: { width: 55, height: 55, borderRadius: 20, position: 'relative' },
+  avatar: { width: '100%', height: '100%', borderRadius: 20, backgroundColor: '#222' },
   onlineBadge: { 
-    width: 12, 
-    height: 12, 
-    borderRadius: 6, 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
     backgroundColor: '#2ECC71', 
     position: 'absolute', 
     bottom: -2, 
     right: -2,
-    borderWidth: 2,
-    borderColor: '#121212'
+    borderWidth: 3,
+    borderColor: '#161616'
   },
   info: { flex: 1, marginLeft: 15 },
-  name: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  subInfo: { color: '#444', fontSize: 11, marginTop: 2 },
-  chatIcon: { padding: 10 },
-  emptyText: { color: '#444', textAlign: 'center', marginTop: 50 }
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  name: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  staffTag: { backgroundColor: '#E74C3C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 },
+  staffTagText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
+  subInfo: { color: '#666', fontSize: 12, marginTop: 4 },
+  chatIcon: { backgroundColor: '#8E44AD15', padding: 10, borderRadius: 12 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyContainer: { alignItems: 'center', marginTop: 100 },
+  emptyText: { color: '#444', textAlign: 'center', marginTop: 15, fontSize: 16 }
 });
