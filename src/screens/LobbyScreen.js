@@ -1,87 +1,84 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, SafeAreaView } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialIcons } from '@expo/vector-icons';
 
 export default function LobbyScreen({ navigation }) {
   const [rooms, setRooms] = useState([]);
-  const [userRole, setUserRole] = useState('user');
+  const [profile, setProfile] = useState({ nexus_coins: 0, level: 1 });
 
   useEffect(() => {
-    fetchRooms();
-    checkRole();
+    fetchData();
   }, []);
 
-  async function checkRole() {
+  async function fetchData() {
+    const { data: roomsData } = await supabase.from('rooms').select('*');
+    if (roomsData) setRooms(roomsData);
+
     const { data: { user } } = await supabase.auth.getUser();
-    const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    setUserRole(data?.role || 'user');
+    const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (profileData) setProfile(profileData);
   }
 
-  async function fetchRooms() {
-    const { data } = await supabase.from('rooms').select('*');
-    setRooms(data || []);
-  }
-
-  async function handleCreateRoom() {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (userRole !== 'admin') {
-      const { data: mine } = await supabase.from('rooms').select('id').eq('owner_id', user.id);
-      if (mine && mine.length >= 1) return Alert.alert("Aviso", "Usuários comuns só podem ter 1 sala.");
-    }
-
-    Alert.prompt("Nova Sala", "Nome da sala:", async (name) => {
-      if (!name) return;
-      const roomId = `room_${Date.now()}`;
-      const { error } = await supabase.from('rooms').insert({ id: roomId, owner_id: user.id, title: name });
-      if (!error) {
-        const seats = Array.from({length: 8}, (_, i) => ({ room_id: roomId, seat_index: i }));
-        await supabase.from('room_seats').insert(seats);
-        navigation.navigate('Room', { roomId, title: name });
-      }
-    });
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.logo}>NEXUS</Text>
-        <View style={{flexDirection: 'row'}}>
-          {userRole === 'admin' && (
-            <TouchableOpacity onPress={() => navigation.navigate('Admin')} style={{marginRight: 15}}>
-              <Ionicons name="shield-checkmark" size={28} color="#FFD700" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-            <Ionicons name="person-circle" size={30} color="#00D4FF" />
-          </TouchableOpacity>
+  const renderRoom = ({ item }) => (
+    <TouchableOpacity style={styles.roomCard} onPress={() => navigation.navigate('Room', { roomId: item.id })}>
+      <View style={styles.roomInfo}>
+        <Text style={styles.roomTitle}>{item.title || 'Sala de Conferência'}</Text>
+        <View style={styles.roomMeta}>
+          <Text style={styles.roomTag}>#Networking</Text>
+          <Text style={styles.roomParticipants}>• 15 conectados</Text>
         </View>
       </View>
+      <Feather name="chevron-right" size={20} color="#333" />
+    </TouchableOpacity>
+  );
 
-      <FlatList 
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.topBar}>
+        <View>
+          <Text style={styles.welcome}>Painel Principal</Text>
+          <View style={styles.stats}>
+            <MaterialIcons name="account-balance-wallet" size={14} color="#8E44AD" />
+            <Text style={styles.statsText}> {profile.nexus_coins} NC</Text>
+            <Text style={styles.divider}>|</Text>
+            <Text style={styles.statsText}>Nível {profile.level}</Text>
+          </View>
+        </View>
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <Image source={{ uri: `https://api.dicebear.com/7.x/initials/svg?seed=N` }} style={styles.avatar} />
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
         data={rooms}
-        keyExtractor={i => i.id}
-        renderItem={({item}) => (
-          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Room', { roomId: item.id, title: item.title })}>
-            <Text style={styles.cardText}>{item.title}</Text>
-            <Ionicons name="chevron-forward" size={20} color="#00D4FF" />
-          </TouchableOpacity>
-        )}
+        renderItem={renderRoom}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={<Text style={styles.sectionLabel}>Canais de Áudio Ativos</Text>}
       />
 
-      <TouchableOpacity style={styles.fab} onPress={handleCreateRoom}>
-        <Ionicons name="add" size={35} color="#000" />
+      <TouchableOpacity style={styles.fab}>
+        <Feather name="plus" size={24} color="#fff" />
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  logo: { color: '#00D4FF', fontSize: 24, fontWeight: 'bold', letterSpacing: 2 },
-  card: { backgroundColor: '#111', padding: 20, marginHorizontal: 20, marginBottom: 10, borderRadius: 15, flexDirection: 'row', justifyContent: 'space-between' },
-  cardText: { color: '#FFF', fontSize: 16, fontWeight: '500' },
-  fab: { position: 'absolute', bottom: 30, right: 30, backgroundColor: '#00D4FF', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center' }
+  safeArea: { flex: 1, backgroundColor: '#0A0A0A' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', padding: 25, borderBottomWidth: 1, borderBottomColor: '#111' },
+  welcome: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  stats: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+  statsText: { color: '#555', fontSize: 12, fontWeight: '600' },
+  divider: { color: '#222', marginHorizontal: 10 },
+  avatar: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#111' },
+  list: { padding: 25 },
+  sectionLabel: { color: '#333', fontSize: 13, fontWeight: '800', letterSpacing: 1, marginBottom: 20, textTransform: 'uppercase' },
+  roomCard: { backgroundColor: '#121212', padding: 20, borderRadius: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#1A1A1A' },
+  roomTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  roomMeta: { flexDirection: 'row', marginTop: 5 },
+  roomTag: { color: '#8E44AD', fontSize: 11, fontWeight: '700' },
+  roomParticipants: { color: '#444', fontSize: 11, marginLeft: 10 },
+  fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 20, backgroundColor: '#8E44AD', justifyContent: 'center', alignItems: 'center', elevation: 5 }
 });

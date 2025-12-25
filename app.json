@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Nexus Conect",
+    "slug": "nexusconect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.nexusconect.nexusconect",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      }
+    },
+    "splash": {
+      "backgroundColor": "#000000",
+      "resizeMode": "contain"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fdd103e8-37bc-4d3a-879f-9ccd65223e53"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/fdd103e8-37bc-4d3a-879f-9ccd65223e53"
+    },
+    "ios": {}
+  }
+}

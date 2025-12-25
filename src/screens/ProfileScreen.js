@@ -1,186 +1,117 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Image, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
-export default function ProfileScreen({ navigation, route }) {
-  // Se vier um ID via rota, visualizamos outro perfil, se não, é o nosso
-  const userIdToShow = route.params?.userId;
-  const [isMyProfile, setIsMyProfile] = useState(false);
-  
+export default function ProfileScreen({ route, navigation }) {
+  const targetId = route.params?.userId;
+  const [profile, setProfile] = useState(null);
+  const [myId, setMyId] = useState(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFriend, setIsFriend] = useState(false);
+  const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ followers: 0, following: 0 });
-  const [profile, setProfile] = useState({
-    id: '',
-    custom_id: '',
-    profile_bio: '',
-    nexus_coins: 0,
-    level: 1,
-    role: 'user'
-  });
 
-  useEffect(() => {
-    fetchData();
-  }, [userIdToShow]);
+  useEffect(() => { fetchAll(); }, [targetId]);
 
-  async function fetchData() {
+  async function fetchAll() {
     setLoading(true);
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      const targetId = userIdToShow || authUser.id;
-      setIsMyProfile(targetId === authUser.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    setMyId(user.id);
+    const id = targetId || user.id;
 
-      // 1. Busca Dados do Perfil
-      const { data: profData } = await supabase.from('profiles').select('*').eq('id', targetId).single();
-      if (profData) setProfile(profData);
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', id).single();
+    setProfile(p);
 
-      // 2. Busca Seguidores (Contagem na tabela friendships)
-      const { count: followersCount } = await supabase
-        .from('friendships')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id_2', targetId); // Quem me segue
+    const { count: fers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', id);
+    const { count: fing } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id);
+    setCounts({ followers: fers || 0, following: fing || 0 });
 
-      const { count: followingCount } = await supabase
-        .from('friendships')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id_1', targetId); // Quem eu sigo
-
-      setStats({ followers: followersCount || 0, following: followingCount || 0 });
-
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
+    if (targetId && targetId !== user.id) {
+      const { data: f } = await supabase.from('follows').select('*').match({ follower_id: user.id, following_id: id }).single();
+      setIsFollowing(!!f);
+      const { data: fr } = await supabase.from('friends').select('*').match({ user_id: user.id, friend_id: id }).single();
+      setIsFriend(!!fr);
     }
-  }
-
-  async function handleUpdate() {
-    setLoading(true);
-    const { error } = await supabase.from('profiles')
-      .update({ profile_bio: profile.profile_bio })
-      .eq('id', profile.id);
-    
-    if (!error) Alert.alert("Sucesso", "Perfil atualizado!");
     setLoading(false);
   }
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator color="#00D4FF" /></View>;
+  async function toggleFollow() {
+    if (isFollowing) {
+      await supabase.from('follows').delete().match({ follower_id: myId, following_id: targetId });
+    } else {
+      await supabase.from('follows').insert({ follower_id: myId, following_id: targetId });
+    }
+    fetchAll();
+  }
+
+  async function toggleFriend() {
+    if (isFriend) {
+      await supabase.from('friends').delete().or(`and(user_id.eq.${myId},friend_id.eq.${targetId}),and(user_id.eq.${targetId},friend_id.eq.${myId})`);
+    } else {
+      await supabase.from('friends').insert([{ user_id: myId, friend_id: targetId }, { user_id: targetId, friend_id: myId }]);
+    }
+    fetchAll();
+  }
+
+  if (loading) return <View style={styles.container}><ActivityIndicator color="#8E44AD" size="large" /></View>;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header Estilizado */}
-      <View style={styles.headerNav}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={28} color="#00D4FF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>@{profile.custom_id}</Text>
-        <TouchableOpacity>
-          <Ionicons name="ellipsis-vertical" size={24} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Foto e Info Principal */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarBorder}>
-            <View style={styles.avatarInner}>
-              <Text style={styles.avatarText}>#{profile.custom_id}</Text>
-            </View>
-            <View style={styles.levelBadge}>
-              <Text style={styles.levelText}>Lv.{profile.level}</Text>
-            </View>
-          </View>
-          
-          <Text style={styles.userName}>Nexus User</Text>
-          <Text style={styles.userRole}>{profile.role.toUpperCase()}</Text>
-        </View>
-
-        {/* Contador Social (Seguidores/Seguindo) */}
-        <View style={styles.socialBar}>
-          <View style={styles.socialItem}>
-            <Text style={styles.socialNumber}>{stats.followers}</Text>
-            <Text style={styles.socialLabel}>Seguidores</Text>
-          </View>
-          <View style={styles.socialDivider} />
-          <View style={styles.socialItem}>
-            <Text style={styles.socialNumber}>{stats.following}</Text>
-            <Text style={styles.socialLabel}>Seguindo</Text>
-          </View>
-          <View style={styles.socialDivider} />
-          <View style={styles.socialItem}>
-            <Text style={styles.socialNumber}>{profile.nexus_coins}</Text>
-            <Text style={styles.socialLabel}>Moedas</Text>
-          </View>
-        </View>
-
-        {/* Ações de Amizade (Só aparece se não for o MEU perfil) */}
-        {!isMyProfile && (
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.followBtn}>
-              <Text style={styles.followBtnText}>Seguir</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.friendBtn}>
-              <Ionicons name="person-add" size={20} color="#00D4FF" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Bio Editável ou Fixa */}
-        <View style={styles.bioSection}>
-          <Text style={styles.sectionTitle}>Sobre mim</Text>
-          <TextInput
-            style={[styles.bioInput, !isMyProfile && { borderBottomWidth: 0 }]}
-            value={profile.profile_bio}
-            onChangeText={(t) => isMyProfile && setProfile({...profile, profile_bio: t})}
-            multiline
-            editable={isMyProfile}
-            placeholder="Nenhuma bio definida..."
-            placeholderTextColor="#444"
-          />
-        </View>
-
-        {isMyProfile && (
-          <TouchableOpacity style={styles.saveBtn} onPress={handleUpdate}>
-            <Text style={styles.saveBtnText}>SALVAR PERFIL</Text>
+      <ScrollView>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}><Feather name="arrow-left" size={24} color="#FFF" /></TouchableOpacity>
+          <Text style={styles.headerTitle}>PERFIL</Text>
+          <TouchableOpacity onPress={() => !targetId && navigation.navigate('EditProfile')}>
+            <Feather name={targetId ? "more-horizontal" : "settings"} size={24} color="#FFF" />
           </TouchableOpacity>
-        )}
+        </View>
+
+        <View style={styles.profileSection}>
+          <Image source={{ uri: `https://api.dicebear.com/7.x/initials/svg?seed=${profile?.custom_id}` }} style={styles.avatar} />
+          <Text style={styles.name}>@{profile?.custom_id}</Text>
+          <Text style={styles.levelBadge}>LEVEL {profile?.level}</Text>
+
+          {targetId && targetId !== myId && (
+            <View style={styles.actions}>
+              <TouchableOpacity style={[styles.mainBtn, isFollowing && styles.btnActive]} onPress={toggleFollow}>
+                <Text style={styles.btnText}>{isFollowing ? "SEGUINDO" : "SEGUIR"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.iconBtn, isFriend && styles.btnActive]} onPress={toggleFriend}>
+                <Feather name={isFriend ? "user-check" : "user-plus"} size={20} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('ChatPrivado', { recipientId: targetId, recipientName: profile.custom_id })}>
+                <Feather name="mail" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}><Text style={styles.statVal}>{counts.followers}</Text><Text style={styles.statLabel}>SEGUIDORES</Text></View>
+            <View style={styles.statItem}><Text style={styles.statVal}>{counts.following}</Text><Text style={styles.statLabel}>SEGUINDO</Text></View>
+            <View style={styles.statItem}><Text style={styles.statVal}>{profile?.nexus_coins}</Text><Text style={styles.statLabel}>COINS</Text></View>
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505' },
-  loading: { flex: 1, backgroundColor: '#050505', justifyContent: 'center' },
-  headerNav: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
-  content: { alignItems: 'center', paddingBottom: 40 },
-  
-  profileHeader: { alignItems: 'center', marginTop: 10 },
-  avatarBorder: { width: 110, height: 110, borderRadius: 55, borderWidth: 2, borderColor: '#00D4FF', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  avatarInner: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#00D4FF', fontWeight: 'bold', fontSize: 18 },
-  levelBadge: { position: 'absolute', bottom: 0, backgroundColor: '#00D4FF', paddingHorizontal: 8, borderRadius: 10 },
-  levelText: { color: '#000', fontSize: 10, fontWeight: 'bold' },
-  
-  userName: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
-  userRole: { color: '#00D4FF', fontSize: 10, letterSpacing: 2, marginTop: 5 },
-
-  socialBar: { flexDirection: 'row', backgroundColor: '#111', borderRadius: 20, padding: 20, width: '90%', marginTop: 30, justifyContent: 'space-around', alignItems: 'center' },
-  socialItem: { alignItems: 'center' },
-  socialNumber: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  socialLabel: { color: '#666', fontSize: 11, marginTop: 4 },
-  socialDivider: { width: 1, height: 30, backgroundColor: '#222' },
-
-  actionRow: { flexDirection: 'row', width: '90%', marginTop: 20, justifyContent: 'space-between' },
-  followBtn: { flex: 1, backgroundColor: '#00D4FF', height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  followBtnText: { color: '#000', fontWeight: 'bold' },
-  friendBtn: { width: 45, height: 45, borderRadius: 12, borderWidth: 1, borderColor: '#00D4FF', justifyContent: 'center', alignItems: 'center' },
-
-  bioSection: { width: '90%', marginTop: 30 },
-  sectionTitle: { color: '#444', fontSize: 12, fontWeight: 'bold', marginBottom: 10, textTransform: 'uppercase' },
-  bioInput: { color: '#BBB', fontSize: 14, lineHeight: 20, borderBottomWidth: 1, borderBottomColor: '#222', paddingBottom: 10 },
-  
-  saveBtn: { backgroundColor: '#111', width: '90%', height: 55, borderRadius: 15, marginTop: 40, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#222' },
-  saveBtnText: { color: '#00D4FF', fontWeight: 'bold' }
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
+  headerTitle: { color: '#FFF', fontWeight: 'bold', letterSpacing: 1 },
+  profileSection: { alignItems: 'center', marginTop: 20 },
+  avatar: { width: 100, height: 100, borderRadius: 35, borderWidth: 2, borderColor: '#8E44AD' },
+  name: { color: '#FFF', fontSize: 24, fontWeight: 'bold', marginTop: 15 },
+  levelBadge: { color: '#8E44AD', fontSize: 10, fontWeight: '900', marginTop: 5, backgroundColor: '#111', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 5 },
+  actions: { flexDirection: 'row', marginTop: 25, gap: 10 },
+  mainBtn: { backgroundColor: '#1A1A1A', paddingHorizontal: 30, borderRadius: 12, height: 48, justifyContent: 'center', borderWidth: 1, borderColor: '#333' },
+  iconBtn: { backgroundColor: '#1A1A1A', width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  btnActive: { backgroundColor: '#8E44AD', borderColor: '#8E44AD' },
+  btnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  statsRow: { flexDirection: 'row', marginTop: 40, width: '90%', backgroundColor: '#111', padding: 20, borderRadius: 20, justifyContent: 'space-around' },
+  statItem: { alignItems: 'center' },
+  statVal: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  statLabel: { color: '#444', fontSize: 8, fontWeight: '900', marginTop: 4 }
 });
